@@ -1,1 +1,5 @@
-# JIUGAUGA
+project/
+├── app.py
+├── requirements.txt
+└── .streamlit/
+    └── secrets.toml
