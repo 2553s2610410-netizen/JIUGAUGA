@@ -1,136 +1,243 @@
-import streamlit as st
-from google import genai
-from google.genai import types
+                import streamlit as st
+import pandas as pd
+import random
+from io import StringIO
 
-# 페이지 설정
 st.set_page_config(
-    page_title="AI 일정 생성기",
-    page_icon="📅",
-    layout="centered"
+    page_title="AI 학교 시간표 생성기",
+    page_icon="📚",
+    layout="wide"
 )
 
-st.title("📅 AI 일정 생성 챗봇")
-st.caption("Gemini 2.5 Flash Lite 기반 일정 생성 앱")
+# -------------------------
+# 함수
+# -------------------------
 
-# API 키 불러오기
-try:
-    api_key = st.secrets["GEMINI_API_KEY"]
-except Exception:
-    st.error("❌ secrets.toml에 GEMINI_API_KEY가 설정되지 않았습니다.")
-    st.stop()
+def generate_timetable(subjects, periods_per_day=7):
+    days = ["월", "화", "수", "목", "금"]
 
-# Gemini 클라이언트 생성
-try:
-    client = genai.Client(api_key=api_key)
-except Exception as e:
-    st.error(f"❌ Gemini 클라이언트 생성 실패: {e}")
-    st.stop()
+    total_slots = periods_per_day * len(days)
 
-# 채팅 기록 저장
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "안녕하세요 👋\n"
-                "원하는 일정이나 계획을 알려주시면 "
-                "효율적인 스케줄을 만들어드릴게요!\n\n"
-                "예시:\n"
-                "- 3일 제주도 여행 일정 짜줘\n"
-                "- 하루 공부 루틴 만들어줘\n"
-                "- 운동 + 식단 일정 짜줘"
-            )
-        }
+    subject_pool = []
+
+    for subject, count in subjects.items():
+        subject_pool.extend([subject] * count)
+
+    if len(subject_pool) > total_slots:
+        return None, "입력한 총 시수가 주간 가능 시간보다 많습니다."
+
+    while len(subject_pool) < total_slots:
+        subject_pool.append("자율")
+
+    major_subjects = ["국어", "수학", "영어", "과학"]
+    activity_subjects = ["체육", "음악", "미술"]
+
+    timetable = {day: [""] * periods_per_day for day in days}
+
+    remaining = subject_pool.copy()
+
+    random.shuffle(remaining)
+
+    for day in days:
+        for period in range(periods_per_day):
+
+            candidates = remaining.copy()
+
+            if not candidates:
+                break
+
+            weighted = []
+
+            for sub in candidates:
+
+                score = 1
+
+                # 오전 선호
+                if period < 3 and sub in major_subjects:
+                    score += 4
+
+                # 오후 선호
+                if period >= 4 and sub in activity_subjects:
+                    score += 4
+
+                # 연속 배치 방지
+                if period > 0:
+                    if timetable[day][period - 1] == sub:
+                        score = 0
+
+                weighted.extend([sub] * max(score, 1))
+
+            selected = random.choice(weighted)
+
+            timetable[day][period] = selected
+            remaining.remove(selected)
+
+    df = pd.DataFrame(
+        timetable,
+        index=[f"{i+1}교시" for i in range(periods_per_day)]
+    )
+
+    return df, None
+
+
+# -------------------------
+# 제목
+# -------------------------
+
+st.title("📚 AI 학교 시간표 자동 생성기")
+st.caption("과목별 주당 시수를 입력하면 현실적인 학교 시간표를 자동으로 생성합니다.")
+
+# -------------------------
+# 기본 정보
+# -------------------------
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    grade = st.selectbox(
+        "학년",
+        ["1학년", "2학년", "3학년"]
+    )
+
+with col2:
+    class_name = st.text_input(
+        "학급",
+        "1반"
+    )
+
+with col3:
+    periods = st.selectbox(
+        "하루 교시 수",
+        [5, 6, 7]
+    )
+
+st.divider()
+
+# -------------------------
+# 과목 입력
+# -------------------------
+
+st.subheader("과목 입력")
+
+default_subjects = pd.DataFrame({
+    "과목": [
+        "국어",
+        "수학",
+        "영어",
+        "과학",
+        "사회",
+        "체육",
+        "음악",
+        "미술"
+    ],
+    "주당시수": [
+        5,
+        5,
+        4,
+        3,
+        3,
+        2,
+        1,
+        1
     ]
+})
 
-# 기존 대화 출력
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+edited = st.data_editor(
+    default_subjects,
+    num_rows="dynamic",
+    use_container_width=True
+)
 
-# 사용자 입력
-user_input = st.chat_input("원하는 일정을 입력하세요...")
+# -------------------------
+# 생성 버튼
+# -------------------------
 
-if user_input:
+if st.button("🎯 시간표 생성", use_container_width=True):
 
-    # 사용자 메시지 저장
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
+    try:
 
-    # 사용자 메시지 출력
-    with st.chat_message("user"):
-        st.markdown(user_input)
+        subjects = {}
 
-    # AI 응답 생성
-    with st.chat_message("assistant"):
+        for _, row in edited.iterrows():
 
-        message_placeholder = st.empty()
+            subject = str(row["과목"]).strip()
 
-        try:
-            # 시스템 프롬프트
-            system_prompt = """
-            너는 전문 일정 플래너 AI다.
+            if subject == "":
+                continue
 
-            규칙:
-            - 사용자의 목적에 맞는 현실적인 일정 생성
-            - 시간 순서대로 정리
-            - 가독성 좋게 마크다운 사용
-            - 필요하면 표 형태 사용
-            - 일정 팁도 함께 제공
-            - 한국어로 친절하게 답변
-            """
+            count = int(row["주당시수"])
 
-            # Gemini 대화 형식 변환
-            contents = []
+            if count <= 0:
+                continue
 
-            for msg in st.session_state.messages:
-                role = "user" if msg["role"] == "user" else "model"
+            subjects[subject] = count
 
-                contents.append(
-                    types.Content(
-                        role=role,
-                        parts=[types.Part(text=msg["content"])]
-                    )
-                )
+        if len(subjects) == 0:
+            st.error("최소 1개 이상의 과목을 입력하세요.")
+            st.stop()
 
-            # Gemini 응답 생성
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=0.7,
-                    max_output_tokens=1200,
-                )
-            )
+        timetable, error = generate_timetable(
+            subjects,
+            periods
+        )
 
-            bot_reply = response.text
+        if error:
+            st.error(error)
+            st.stop()
 
-            # 응답 출력
-            message_placeholder.markdown(bot_reply)
+        st.success(
+            f"{grade} {class_name} 시간표가 생성되었습니다."
+        )
 
-            # 채팅 기록 저장
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": bot_reply
-            })
+        st.subheader("📅 생성된 시간표")
 
-        except Exception as e:
+        st.dataframe(
+            timetable,
+            use_container_width=True
+        )
 
-            error_message = f"""
-            ❌ 일정 생성 중 오류가 발생했습니다.
+        csv = timetable.to_csv(
+            encoding="utf-8-sig"
+        )
 
-            잠시 후 다시 시도해주세요.
+        st.download_button(
+            label="⬇️ CSV 다운로드",
+            data=csv,
+            file_name=f"{grade}_{class_name}_시간표.csv",
+            mime="text/csv"
+        )
 
-            오류 내용:
-            {str(e)}
-            """
+        st.subheader("📊 과목별 시수 확인")
 
-            message_placeholder.error(error_message)
+        count_result = {}
 
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": "오류가 발생했어요 😢 잠시 후 다시 시도해주세요."
-            })
+        for subject in subjects:
+            count_result[subject] = (
+                timetable == subject
+            ).sum().sum()
+
+        summary_df = pd.DataFrame({
+            "과목": count_result.keys(),
+            "배정시수": count_result.values()
+        })
+
+        st.dataframe(
+            summary_df,
+            use_container_width=True
+        )
+
+    except Exception as e:
+        st.error(f"오류 발생: {e}")
+
+# -------------------------
+# 사용 안내
+# -------------------------
+
+with st.expander("사용 방법"):
+    st.markdown("""
+    1. 학년과 학급을 선택합니다.
+    2. 과목과 주당 시수를 입력합니다.
+    3. 시간표 생성 버튼을 누릅니다.
+    4. 자동 생성된 시간표를 확인합니다.
+    5. CSV로 다운로드할 수 있습니다.
+    """)
