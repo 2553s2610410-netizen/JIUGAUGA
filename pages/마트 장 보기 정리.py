@@ -1,4 +1,4 @@
-```python
+python
 import streamlit as st
 from datetime import datetime
 
@@ -206,4 +206,3 @@ st.markdown("""
 </ul>
 </div>
 """, unsafe_allow_html=True)
-```
