@@ -1,5 +1,6 @@
 import streamlit as st
-from datetime import date
+import pandas as pd
+from datetime import date, timedelta
 
 st.set_page_config(
     page_title="여행 일정 정리표",
@@ -7,200 +8,166 @@ st.set_page_config(
     layout="wide"
 )
 
-# ----------------------------
-# 여행 일정 생성 함수
-# ----------------------------
-def generate_schedule(destination, days, style):
-    schedule = []
-
-    style_templates = {
-        "관광": [
-            "대표 관광지 방문",
-            "유명 랜드마크 탐방",
-            "현지 맛집 방문",
-            "야경 감상"
-        ],
-        "휴양": [
-            "호텔 및 리조트 휴식",
-            "카페 투어",
-            "산책 및 힐링",
-            "자유 시간"
-        ],
-        "맛집": [
-            "현지 유명 맛집 방문",
-            "전통시장 탐방",
-            "카페 투어",
-            "야식 즐기기"
-        ],
-        "가족여행": [
-            "가족 명소 방문",
-            "체험 프로그램 참여",
-            "공원 산책",
-            "기념사진 촬영"
-        ]
-    }
-
-    activities = style_templates.get(style, style_templates["관광"])
-
-    for day in range(1, days + 1):
-        schedule.append({
-            "day": day,
-            "morning": activities[0],
-            "afternoon": activities[1],
-            "evening": activities[2],
-            "night": activities[3]
-        })
-
-    return schedule
-
-
-# ----------------------------
-# 준비물 생성
-# ----------------------------
-def get_checklist(style):
-    base = [
-        "여권/신분증",
-        "휴대폰 충전기",
-        "보조배터리",
-        "현금 및 카드",
-        "세면도구"
+# 관광지 추천 데이터
+TOURIST_SPOTS = {
+    "서울": [
+        "경복궁",
+        "북촌한옥마을",
+        "남산타워",
+        "명동",
+        "한강공원"
+    ],
+    "부산": [
+        "해운대",
+        "광안리",
+        "감천문화마을",
+        "태종대",
+        "자갈치시장"
+    ],
+    "제주": [
+        "성산일출봉",
+        "협재해수욕장",
+        "한라산",
+        "우도",
+        "천지연폭포"
+    ],
+    "도쿄": [
+        "시부야",
+        "아사쿠사",
+        "도쿄타워",
+        "신주쿠",
+        "우에노공원"
+    ],
+    "오사카": [
+        "도톤보리",
+        "오사카성",
+        "유니버설 스튜디오 재팬",
+        "신세카이",
+        "우메다 스카이빌딩"
+    ],
+    "파리": [
+        "에펠탑",
+        "루브르 박물관",
+        "개선문",
+        "몽마르트르",
+        "오르세 미술관"
     ]
-
-    if style == "휴양":
-        base.extend([
-            "수영복",
-            "선글라스",
-            "선크림"
-        ])
-
-    elif style == "맛집":
-        base.extend([
-            "카메라",
-            "물티슈"
-        ])
-
-    elif style == "가족여행":
-        base.extend([
-            "상비약",
-            "간식"
-        ])
-
-    return base
+}
 
 
-# ----------------------------
-# 제목
-# ----------------------------
+def get_recommendations(destination):
+    destination = destination.strip()
+
+    for city, spots in TOURIST_SPOTS.items():
+        if city.lower() == destination.lower():
+            return spots
+
+    return []
+
+
 st.title("✈️ 여행 일정 정리표")
-st.caption("여행지를 입력하면 자동으로 일정표를 생성합니다.")
 
-# ----------------------------
-# 입력 영역
-# ----------------------------
-with st.form("travel_form"):
+st.write("여행 정보를 입력하면 일정표와 관광지 추천을 제공합니다.")
 
-    destination = st.text_input(
-        "여행지",
-        placeholder="예: 제주도, 도쿄, 파리"
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        start_date = st.date_input(
-            "출발일",
-            value=date.today()
-        )
-
-    with col2:
-        end_date = st.date_input(
-            "도착일",
-            value=date.today()
-        )
-
-    style = st.selectbox(
-        "여행 스타일",
-        ["관광", "휴양", "맛집", "가족여행"]
-    )
-
-    submitted = st.form_submit_button("일정 생성")
-
-# ----------------------------
-# 결과
-# ----------------------------
-if submitted:
-
-    if not destination.strip():
-        st.error("여행지를 입력해주세요.")
-        st.stop()
-
-    if end_date < start_date:
-        st.error("도착일은 출발일 이후여야 합니다.")
-        st.stop()
-
-    days = (end_date - start_date).days + 1
-
-    st.success(
-        f"{destination} {days}일 여행 일정이 생성되었습니다."
-    )
-
-    schedule = generate_schedule(
-        destination,
-        days,
-        style
-    )
-
-    st.subheader("📅 여행 일정")
-
-    markdown_text = f"# {destination} 여행 일정\n\n"
-
-    for item in schedule:
-
-        with st.expander(f"{item['day']}일차"):
-
-            st.write(f"🌅 오전 : {item['morning']}")
-            st.write(f"☀️ 오후 : {item['afternoon']}")
-            st.write(f"🌇 저녁 : {item['evening']}")
-            st.write(f"🌙 밤 : {item['night']}")
-
-        markdown_text += (
-            f"## {item['day']}일차\n"
-            f"- 오전: {item['morning']}\n"
-            f"- 오후: {item['afternoon']}\n"
-            f"- 저녁: {item['evening']}\n"
-            f"- 밤: {item['night']}\n\n"
-        )
-
-    st.subheader("🎒 여행 준비물")
-
-    checklist = get_checklist(style)
-
-    for item in checklist:
-        st.checkbox(item)
-
-    markdown_text += "\n## 준비물\n"
-
-    for item in checklist:
-        markdown_text += f"- {item}\n"
-
-    st.download_button(
-        label="📥 일정표 다운로드 (Markdown)",
-        data=markdown_text,
-        file_name=f"{destination}_travel_plan.md",
-        mime="text/markdown"
-    )
-
-# ----------------------------
-# 안내
-# ----------------------------
 st.divider()
 
-st.info(
-    """
-    사용 방법
-    1. 여행지를 입력하세요.
-    2. 여행 기간을 선택하세요.
-    3. 여행 스타일을 선택하세요.
-    4. 일정 생성 버튼을 누르세요.
-    """
+col1, col2 = st.columns(2)
+
+with col1:
+    destination = st.text_input(
+        "여행지 입력",
+        placeholder="예: 서울, 부산, 제주, 도쿄, 파리"
+    )
+
+with col2:
+    traveler = st.text_input(
+        "여행자 이름",
+        placeholder="홍길동"
+    )
+
+col3, col4 = st.columns(2)
+
+with col3:
+    start_date = st.date_input(
+        "출발일",
+        value=date.today()
+    )
+
+with col4:
+    end_date = st.date_input(
+        "도착일",
+        value=date.today() + timedelta(days=2)
+    )
+
+memo = st.text_area(
+    "여행 메모",
+    placeholder="준비물, 예약 정보 등을 기록하세요."
 )
+
+st.divider()
+
+st.subheader("📍 추천 관광지")
+
+if destination:
+    recommendations = get_recommendations(destination)
+
+    if recommendations:
+        for spot in recommendations:
+            st.success(f"✔ {spot}")
+    else:
+        st.info("등록된 추천 관광지가 없습니다.")
+
+st.divider()
+
+st.subheader("🗓 여행 일정표")
+
+try:
+    if end_date < start_date:
+        st.error("도착일은 출발일보다 빠를 수 없습니다.")
+    else:
+        total_days = (end_date - start_date).days + 1
+
+        schedule_data = []
+
+        for i in range(total_days):
+            current_day = start_date + timedelta(days=i)
+
+            schedule_data.append({
+                "날짜": current_day,
+                "오전 일정": "",
+                "오후 일정": "",
+                "저녁 일정": ""
+            })
+
+        schedule_df = pd.DataFrame(schedule_data)
+
+        edited_df = st.data_editor(
+            schedule_df,
+            use_container_width=True,
+            num_rows="fixed"
+        )
+
+        csv = edited_df.to_csv(index=False).encode("utf-8-sig")
+
+        st.download_button(
+            label="📥 일정표 CSV 다운로드",
+            data=csv,
+            file_name="travel_schedule.csv",
+            mime="text/csv"
+        )
+
+except Exception as e:
+    st.error(f"오류가 발생했습니다: {e}")
+
+st.divider()
+
+st.subheader("📋 여행 요약")
+
+st.write(f"**여행자:** {traveler if traveler else '-'}")
+st.write(f"**여행지:** {destination if destination else '-'}")
+
+if end_date >= start_date:
+    days = (end_date - start_date).days + 1
+    st.write(f"**여행 기간:** {days}일")
+
+st.write(f"**메모:** {memo if memo else '-'}")
