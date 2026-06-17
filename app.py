@@ -3,16 +3,17 @@ import pandas as pd
 from datetime import date, timedelta
 
 st.set_page_config(
-    page_title="여행 일정 정리표",
+    page_title="AI 여행 일정 생성기",
     page_icon="✈️",
     layout="wide"
 )
 
-# 관광지 추천 데이터
+# 관광지 데이터
 TOURIST_SPOTS = {
     "서울": [
         "경복궁",
         "북촌한옥마을",
+        "인사동",
         "남산타워",
         "명동",
         "한강공원"
@@ -21,53 +22,93 @@ TOURIST_SPOTS = {
         "해운대",
         "광안리",
         "감천문화마을",
+        "자갈치시장",
         "태종대",
-        "자갈치시장"
+        "송도해상케이블카"
     ],
     "제주": [
         "성산일출봉",
+        "섭지코지",
+        "우도",
         "협재해수욕장",
         "한라산",
-        "우도",
         "천지연폭포"
     ],
     "도쿄": [
         "시부야",
-        "아사쿠사",
-        "도쿄타워",
         "신주쿠",
-        "우에노공원"
+        "아사쿠사",
+        "우에노공원",
+        "도쿄타워",
+        "긴자"
     ],
     "오사카": [
         "도톤보리",
         "오사카성",
-        "유니버설 스튜디오 재팬",
         "신세카이",
-        "우메다 스카이빌딩"
+        "우메다",
+        "난바",
+        "유니버설 스튜디오 재팬"
     ],
     "파리": [
         "에펠탑",
         "루브르 박물관",
         "개선문",
         "몽마르트르",
-        "오르세 미술관"
+        "오르세 미술관",
+        "샹젤리제 거리"
     ]
 }
 
 
-def get_recommendations(destination):
-    destination = destination.strip()
+def generate_schedule(destination, days):
+    places = TOURIST_SPOTS.get(destination, [])
 
-    for city, spots in TOURIST_SPOTS.items():
-        if city.lower() == destination.lower():
-            return spots
+    if not places:
+        return pd.DataFrame()
 
-    return []
+    schedule = []
+
+    place_index = 0
+
+    for day in range(days):
+
+        morning = (
+            places[place_index]
+            if place_index < len(places)
+            else "-"
+        )
+        place_index += 1
+
+        afternoon = (
+            places[place_index]
+            if place_index < len(places)
+            else "-"
+        )
+        place_index += 1
+
+        evening = (
+            places[place_index]
+            if place_index < len(places)
+            else "자유시간"
+        )
+        place_index += 1
+
+        schedule.append({
+            "DAY": day + 1,
+            "오전": morning,
+            "오후": afternoon,
+            "저녁": evening
+        })
+
+    return pd.DataFrame(schedule)
 
 
-st.title("✈️ 여행 일정 정리표")
+st.title("✈️ AI 여행 일정 생성기")
 
-st.write("여행 정보를 입력하면 일정표와 관광지 추천을 제공합니다.")
+st.write(
+    "여행지와 여행 기간을 입력하면 자동으로 일정을 만들어드립니다."
+)
 
 st.divider()
 
@@ -75,99 +116,86 @@ col1, col2 = st.columns(2)
 
 with col1:
     destination = st.text_input(
-        "여행지 입력",
-        placeholder="예: 서울, 부산, 제주, 도쿄, 파리"
+        "여행지",
+        placeholder="서울, 부산, 제주, 도쿄, 오사카, 파리"
     )
 
 with col2:
-    traveler = st.text_input(
-        "여행자 이름",
-        placeholder="홍길동"
+    days = st.number_input(
+        "여행 일수",
+        min_value=1,
+        max_value=14,
+        value=3
     )
 
-col3, col4 = st.columns(2)
-
-with col3:
-    start_date = st.date_input(
-        "출발일",
-        value=date.today()
-    )
-
-with col4:
-    end_date = st.date_input(
-        "도착일",
-        value=date.today() + timedelta(days=2)
-    )
-
-memo = st.text_area(
-    "여행 메모",
-    placeholder="준비물, 예약 정보 등을 기록하세요."
+start_date = st.date_input(
+    "출발일",
+    value=date.today()
 )
 
-st.divider()
+if st.button("🚀 일정 생성", use_container_width=True):
 
-st.subheader("📍 추천 관광지")
+    if not destination:
+        st.warning("여행지를 입력해주세요.")
+        st.stop()
 
-if destination:
-    recommendations = get_recommendations(destination)
+    schedule_df = generate_schedule(destination, days)
 
-    if recommendations:
-        for spot in recommendations:
-            st.success(f"✔ {spot}")
-    else:
-        st.info("등록된 추천 관광지가 없습니다.")
-
-st.divider()
-
-st.subheader("🗓 여행 일정표")
-
-try:
-    if end_date < start_date:
-        st.error("도착일은 출발일보다 빠를 수 없습니다.")
-    else:
-        total_days = (end_date - start_date).days + 1
-
-        schedule_data = []
-
-        for i in range(total_days):
-            current_day = start_date + timedelta(days=i)
-
-            schedule_data.append({
-                "날짜": current_day,
-                "오전 일정": "",
-                "오후 일정": "",
-                "저녁 일정": ""
-            })
-
-        schedule_df = pd.DataFrame(schedule_data)
-
-        edited_df = st.data_editor(
-            schedule_df,
-            use_container_width=True,
-            num_rows="fixed"
+    if schedule_df.empty:
+        st.info(
+            "해당 여행지 데이터가 없습니다.\n\n"
+            "관광지 추천을 제공할 수 없습니다."
         )
+        st.stop()
 
-        csv = edited_df.to_csv(index=False).encode("utf-8-sig")
+    st.success("일정 생성 완료!")
 
-        st.download_button(
-            label="📥 일정표 CSV 다운로드",
-            data=csv,
-            file_name="travel_schedule.csv",
-            mime="text/csv"
-        )
+    st.subheader("📍 추천 관광지")
 
-except Exception as e:
-    st.error(f"오류가 발생했습니다: {e}")
+    for place in TOURIST_SPOTS[destination]:
+        st.write(f"✔ {place}")
 
-st.divider()
+    st.subheader("🗓 자동 생성 일정")
 
-st.subheader("📋 여행 요약")
+    result_rows = []
 
-st.write(f"**여행자:** {traveler if traveler else '-'}")
-st.write(f"**여행지:** {destination if destination else '-'}")
+    for idx, row in schedule_df.iterrows():
 
-if end_date >= start_date:
-    days = (end_date - start_date).days + 1
-    st.write(f"**여행 기간:** {days}일")
+        trip_date = start_date + timedelta(days=idx)
 
-st.write(f"**메모:** {memo if memo else '-'}")
+        result_rows.append({
+            "날짜": trip_date.strftime("%Y-%m-%d"),
+            "오전": row["오전"],
+            "오후": row["오후"],
+            "저녁": row["저녁"]
+        })
+
+    result_df = pd.DataFrame(result_rows)
+
+    st.dataframe(
+        result_df,
+        use_container_width=True
+    )
+
+    csv = result_df.to_csv(
+        index=False
+    ).encode("utf-8-sig")
+
+    st.download_button(
+        "📥 일정 CSV 다운로드",
+        csv,
+        "travel_schedule.csv",
+        "text/csv"
+    )
+
+    st.subheader("📋 여행 요약")
+
+    st.info(
+        f"""
+여행지 : {destination}
+
+여행 기간 : {days}일
+
+총 추천 관광지 : {len(TOURIST_SPOTS[destination])}곳
+"""
+    )
